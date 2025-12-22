@@ -258,37 +258,52 @@ let searchInput, timeElement, dateElement, greetingElement, weatherElement, quot
 // ========================================
 
 function updateDateTime() {
-    if (!timeElement || !dateElement) return;
-    
-    const now = new Date();
-    
-    let hours = now.getHours();
-    const minutes = now.getMinutes().toString().padStart(2, '0');
-    const seconds = now.getSeconds().toString().padStart(2, '0');
-    let timeString;
-    
-    if (settings.timeFormat === '12') {
-        const period = hours >= 12 ? 'PM' : 'AM';
-        hours = hours % 12 || 12;
-        if (settings.showSeconds === 'true') {
-            timeString = `${hours}:${minutes}:${seconds} ${period}`;
-        } else {
-            timeString = `${hours}:${minutes} ${period}`;
+    // Safety check: ensure document and elements are still valid
+    if (!document.body || !timeElement || !dateElement) {
+        if (timeUpdateInterval) {
+            clearInterval(timeUpdateInterval);
+            timeUpdateInterval = null;
         }
-    } else {
-        if (settings.showSeconds === 'true') {
-            timeString = `${hours.toString().padStart(2, '0')}:${minutes}:${seconds}`;
-        } else {
-            timeString = `${hours.toString().padStart(2, '0')}:${minutes}`;
-        }
+        return;
     }
     
-    timeElement.textContent = timeString;
-    
-    const options = { weekday: 'long', month: 'short', day: 'numeric' };
-    dateElement.textContent = now.toLocaleDateString('en-US', options);
-    
-    updateGreeting(now.getHours());
+    try {
+        const now = new Date();
+        
+        let hours = now.getHours();
+        const minutes = now.getMinutes().toString().padStart(2, '0');
+        const seconds = now.getSeconds().toString().padStart(2, '0');
+        let timeString;
+        
+        if (settings.timeFormat === '12') {
+            const period = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12 || 12;
+            if (settings.showSeconds === 'true') {
+                timeString = `${hours}:${minutes}:${seconds} ${period}`;
+            } else {
+                timeString = `${hours}:${minutes} ${period}`;
+            }
+        } else {
+            if (settings.showSeconds === 'true') {
+                timeString = `${hours.toString().padStart(2, '0')}:${minutes}:${seconds}`;
+            } else {
+                timeString = `${hours.toString().padStart(2, '0')}:${minutes}`;
+            }
+        }
+        
+        timeElement.textContent = timeString;
+        
+        const options = { weekday: 'long', month: 'short', day: 'numeric' };
+        dateElement.textContent = now.toLocaleDateString('en-US', options);
+        
+        updateGreeting(now.getHours());
+    } catch (error) {
+        console.error('Error in updateDateTime:', error);
+        if (timeUpdateInterval) {
+            clearInterval(timeUpdateInterval);
+            timeUpdateInterval = null;
+        }
+    }
 }
 
 function updateGreeting(hour) {
@@ -413,29 +428,44 @@ function updateKeyboardHints() {
 // ========================================
 
 async function updateWeather() {
-    if (!weatherElement) return;
-
-    // Check if API key is configured
-    if (!settings.openWeatherApiKey || !settings.weatherLocation) {
-        // Fall back to mock weather data if no API key or location
-        showMockWeather();
+    // Safety check: ensure document and elements are still valid
+    if (!document.body || !weatherElement) {
+        if (weatherUpdateInterval) {
+            clearInterval(weatherUpdateInterval);
+            weatherUpdateInterval = null;
+        }
         return;
     }
 
-    let query = `q=${encodeURIComponent(settings.weatherLocation)}`;
-    // Optionally, use geolocation:
-    // if ('geolocation' in navigator) {
-    //     navigator.geolocation. getCurrentPosition(pos => {
-    //         query = `lat=${pos.coords. latitude}&lon=${pos.coords.longitude}`;
-    //         fetchWeather(query);
-    //     }, () => {
-    //         fetchWeather(query);
-    //     });
-    // } else {
-    //     fetchWeather(query);
-    // }
-    // For now, just use city name:
-    fetchWeather(query);
+    try {
+        // Check if API key is configured
+        if (!settings.openWeatherApiKey || !settings.weatherLocation) {
+            // Fall back to mock weather data if no API key or location
+            showMockWeather();
+            return;
+        }
+
+        let query = `q=${encodeURIComponent(settings.weatherLocation)}`;
+        // Optionally, use geolocation:
+        // if ('geolocation' in navigator) {
+        //     navigator.geolocation.getCurrentPosition(pos => {
+        //         query = `lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`;
+        //         fetchWeather(query);
+        //     }, () => {
+        //         fetchWeather(query);
+        //     });
+        // } else {
+        //     fetchWeather(query);
+        // }
+        // For now, just use city name:
+        fetchWeather(query);
+    } catch (error) {
+        console.error('Error in updateWeather:', error);
+        if (weatherUpdateInterval) {
+            clearInterval(weatherUpdateInterval);
+            weatherUpdateInterval = null;
+        }
+    }
 }
 
 async function fetchWeather(query) {
@@ -1381,7 +1411,17 @@ function init() {
     if (timeUpdateInterval) {
         clearInterval(timeUpdateInterval);
     }
-    timeUpdateInterval = setInterval(updateDateTime, 1000);
+    timeUpdateInterval = setInterval(() => {
+        try {
+            updateDateTime();
+        } catch (error) {
+            console.error('Error in time update:', error);
+            if (timeUpdateInterval) {
+                clearInterval(timeUpdateInterval);
+                timeUpdateInterval = null;
+            }
+        }
+    }, 1000);
     
     // Add click handler to time element to toggle format
     if (timeElement) {
@@ -1401,7 +1441,17 @@ function init() {
     if (weatherUpdateInterval) {
         clearInterval(weatherUpdateInterval);
     }
-    weatherUpdateInterval = setInterval(updateWeather, 600000);
+    weatherUpdateInterval = setInterval(() => {
+        try {
+            updateWeather();
+        } catch (error) {
+            console.error('Error in weather update:', error);
+            if (weatherUpdateInterval) {
+                clearInterval(weatherUpdateInterval);
+                timeUpdateInterval = null;
+            }
+        }
+    }, 600000);
     
     // Set random quote
     updateQuote();
@@ -1565,14 +1615,19 @@ function showNotification(message, type = 'info') {
 // ========================================
 
 function cleanup() {
-    // Clear all intervals to prevent memory leaks
-    if (timeUpdateInterval) {
-        clearInterval(timeUpdateInterval);
-        timeUpdateInterval = null;
-    }
-    if (weatherUpdateInterval) {
-        clearInterval(weatherUpdateInterval);
-        weatherUpdateInterval = null;
+    try {
+        // Clear all intervals to prevent memory leaks
+        if (timeUpdateInterval) {
+            clearInterval(timeUpdateInterval);
+            timeUpdateInterval = null;
+        }
+        if (weatherUpdateInterval) {
+            clearInterval(weatherUpdateInterval);
+            weatherUpdateInterval = null;
+        }
+        console.log('Cleanup completed successfully');
+    } catch (error) {
+        console.error('Error during cleanup:', error);
     }
 }
 
@@ -1586,3 +1641,10 @@ document.addEventListener('DOMContentLoaded', init);
 window.addEventListener('beforeunload', cleanup);
 window.addEventListener('pagehide', cleanup);
 window.addEventListener('unload', cleanup);
+
+// Safari-specific: Also cleanup on visibility change
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        cleanup();
+    }
+});
